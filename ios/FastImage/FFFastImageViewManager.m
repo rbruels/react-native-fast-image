@@ -2,6 +2,7 @@
 #import "FFFastImageView.h"
 
 #import <SDWebImage/SDWebImagePrefetcher.h>
+#import <SDWebImage/SDImageCache.h>
 
 @implementation FFFastImageViewManager
 
@@ -40,11 +41,11 @@ RCT_REMAP_METHOD(
  ) {
    SDWebImageManager *imageManager = [SDWebImageManager sharedManager];
    NSString *cacheKey = [imageManager cacheKeyForURL:source.url];
-   NSString *imagePath = [imageManager.imageCache defaultCachePathForKey:cacheKey];
+   NSString *imagePath = [(SDImageCache *)imageManager.imageCache cachePathForKey:cacheKey];
 
    // set headers
    [source.headers enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSString* header, BOOL *stop) {
-     [imageManager.imageDownloader setValue:header forHTTPHeaderField:key];
+     [[SDWebImageDownloader sharedDownloader] setValue:header forHTTPHeaderField:key];
    }];
 
    // set options
@@ -67,7 +68,7 @@ RCT_REMAP_METHOD(
        options |= SDWebImageRefreshCached;
        break;
      case FFFCacheControlCacheOnly:
-       options |= SDWebImageCacheMemoryOnly;
+       options |= SDWebImageFromCacheOnly;
        break;
      case FFFCacheControlImmutable:
        break;
@@ -81,7 +82,7 @@ RCT_REMAP_METHOD(
      }
 
      // store image manually (since image manager may call the completion block before storing it in the disk cache)
-     [imageManager.imageCache storeImage:image forKey:cacheKey completion:^{
+     [(SDImageCache *)imageManager.imageCache storeImage:image forKey:cacheKey completion:^{
        resolve(imagePath);
      }];
    }];

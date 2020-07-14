@@ -2,6 +2,7 @@
 #import "FFFastImageView.h"
 
 #import <SDWebImage/SDWebImagePrefetcher.h>
+#import <SDWebImage/SDImageCache.h>
 
 @implementation FFFastImageViewManager
 
@@ -35,57 +36,58 @@ RCT_EXPORT_METHOD(preload:(nonnull NSArray<FFFastImageSource *> *)sources)
 }
 
 RCT_REMAP_METHOD(
-  loadImage,
-  loadImageWithSource: (nonnull FFFastImageSource *)source resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject
-) {
-  SDWebImageManager *imageManager = [SDWebImageManager sharedManager];
-  NSString *cacheKey = [imageManager cacheKeyForURL:source.url];
-  NSString *imagePath = [imageManager.imageCache defaultCachePathForKey:cacheKey];
-  
-  // set headers
-  [source.headers enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSString* header, BOOL *stop) {
-    [imageManager.imageDownloader setValue:header forHTTPHeaderField:key];
-  }];
+   loadImage,
+   loadImageWithSource: (nonnull FFFastImageSource *)source resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject
+ ) {
+   SDWebImageManager *imageManager = [SDWebImageManager sharedManager];
+   NSString *cacheKey = [imageManager cacheKeyForURL:source.url];
+   NSString *imagePath = [(SDImageCache *)imageManager.imageCache cachePathForKey:cacheKey];
 
-  // set options
-  SDWebImageOptions options = 0;
-  options |= SDWebImageRetryFailed;
-  switch (source.priority) {
-    case FFFPriorityLow:
-      options |= SDWebImageLowPriority;
-      break;
-    case FFFPriorityNormal:
-      // Priority is normal by default.
-      break;
-    case FFFPriorityHigh:
-      options |= SDWebImageHighPriority;
-      break;
-  }
-  
-  switch (source.cacheControl) {
-    case FFFCacheControlWeb:
-      options |= SDWebImageRefreshCached;
-      break;
-    case FFFCacheControlCacheOnly:
-      options |= SDWebImageCacheMemoryOnly;
-      break;
-    case FFFCacheControlImmutable:
-      break;
-  }
-  
-  // load image
-  [imageManager loadImageWithURL:source.url options:options progress:nil completed:^(UIImage * _Nullable image, NSData * _Nullable data, NSError * _Nullable error, SDImageCacheType cacheType, BOOL finished, NSURL * _Nullable imageURL) {
-    if (error != nil) {
-      reject(@"FastImage", @"Failed to load image", error);
-      return;
-    }
+   // set headers
+   [source.headers enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSString* header, BOOL *stop) {
+     [[SDWebImageDownloader sharedDownloader] setValue:header forHTTPHeaderField:key];
+   }];
 
-    // store image manually (since image manager may call the completion block before storing it in the disk cache)
-    [imageManager.imageCache storeImage:image forKey:cacheKey completion:^{
-      resolve(imagePath);
-    }];
-  }];
-}
+   // set options
+   SDWebImageOptions options = 0;
+   options |= SDWebImageRetryFailed;
+   switch (source.priority) {
+     case FFFPriorityLow:
+       options |= SDWebImageLowPriority;
+       break;
+     case FFFPriorityNormal:
+       // Priority is normal by default.
+       break;
+     case FFFPriorityHigh:
+       options |= SDWebImageHighPriority;
+       break;
+   }
+
+   switch (source.cacheControl) {
+     case FFFCacheControlWeb:
+       options |= SDWebImageRefreshCached;
+       break;
+     case FFFCacheControlCacheOnly:
+       options |= SDWebImageFromCacheOnly;
+       break;
+     case FFFCacheControlImmutable:
+       break;
+   }
+
+   // load image
+   [imageManager loadImageWithURL:source.url options:options progress:nil completed:^(UIImage * _Nullable image, NSData * _Nullable data, NSError * _Nullable error, SDImageCacheType cacheType, BOOL finished, NSURL * _Nullable imageURL) {
+     if (error != nil) {
+       reject(@"FastImage", @"Failed to load image", error);
+       return;
+     }
+
+     // store image manually (since image manager may call the completion block before storing it in the disk cache)
+     [(SDImageCache *)imageManager.imageCache storeImage:image forKey:cacheKey completion:^{
+       resolve(imagePath);
+     }];
+   }];
+ }
+
 
 @end
 
